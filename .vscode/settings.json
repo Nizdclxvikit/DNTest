@@ -1,0 +1,4 @@
+{
+    "dotnet.defaultSolution": "Server.sln",
+    "cmake.configureOnOpen": true
+}
