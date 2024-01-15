@@ -21,7 +21,7 @@ namespace Server
         public string? message;
         private const string eol = "\r\n";
 
-        public const byte chunkSize = 32; // Square only (32*32)
+        public const byte chunkSize = 128; // Square only
         public bool hasPartialChunkX { get {return width%chunkSize!=0; } }
         public bool hasPartialChunkY { get {return height%chunkSize!=0; } }
         public int numChunksX { get {return width / chunkSize + (hasPartialChunkX?1:0); } }
