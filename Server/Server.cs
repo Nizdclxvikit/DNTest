@@ -11,13 +11,18 @@ namespace Server
     class Server
     {
 
-        TcpListener TL;
-        Responder responder;
+        private TcpListener TL;
+        private Responder responder;
+        private NetworkStream stream;
+        private bool connected = false;
 
-        public Server()
+        private static readonly byte[] keepAlive = {0};
+        private const string eol = "\r\n";
+
+        public Server() // This will never exit
         {
 
-            System.Net.IPAddress localaddr = IPAddress.Parse("127.0.0.1");
+            IPAddress localaddr = IPAddress.Parse("127.0.0.1");
             int port = 80;
             TL = new TcpListener(localaddr, port);
             responder = new ResponderFractal();
@@ -25,32 +30,48 @@ namespace Server
             TL.Start();
             Console.WriteLine("Listener started");
 
-            HandleConnection(); // Blocks until something connects
+            while(true)
+            {
+                TcpClient client = TL.AcceptTcpClient(); // Blocks until something connects
+                HandleConnection(client); // Returns when it disconnects
+            }
         }
 
-        void HandleConnection()
+        private void HandleConnection(TcpClient client)
         {
-            TcpClient client = TL.AcceptTcpClient();
-            NetworkStream stream = client.GetStream();
-
             Console.WriteLine("A client connected.");
+            connected = true;
+            stream = client.GetStream();
 
-            const string eol = "\r\n";
+            DateTime lastChecked = DateTime.Now;
 
             while (true) {
-                while (!stream.DataAvailable); // Wait for data available
+                // Wait for data available
+                while (!stream.DataAvailable)
+                {
+                    // Send keepAlive every 2 seconds
+                    if (DateTime.Now.Subtract(lastChecked) >= TimeSpan.FromSeconds(2))
+                    {
+                        lastChecked = DateTime.Now;
+                        if (!TryWrite(keepAlive, 0, 1))
+                        {
+                            connected = false;
+                            break;
+                        }
+                    }
+                }
+                if (!connected) break;
                 
-
+                // Read input data
                 byte[] bytes = new byte[client.Available]; // Do we need to delete/deallocate this...?
                 stream.Read(bytes, 0, bytes.Length);
 
+                if (Encoding.UTF8.GetString(bytes) == "EXIT") break; //Disconnect
 
+                // Let the responder do the calculations
                 Response response = responder.GetResponse(bytes);
 
-                
-            
-
-
+                // Formulate our response (a tcp packet, max 65535 bytes)
                 byte[] responseBytes = {};
 
                 // What comes after depends on status
@@ -68,17 +89,39 @@ namespace Server
 
                 }
 
+                // Concat the status to the beginning
                 byte[] fullResponse = new byte[1 + responseBytes.Length];
                 fullResponse[0] = (byte)response.status;
                 Buffer.BlockCopy(responseBytes, 0, fullResponse, 1, responseBytes.Length);
 
-                stream.Write(fullResponse, 0, fullResponse.Length);
+                // Send it, if it fails just bail
+                if (!TryWrite(fullResponse, 0, fullResponse.Length)) break;
+                lastChecked = DateTime.Now; // Wrote something so reset timer
   
             }
 
-            
+            // Disconnect
+            stream.Close();
+            client.Close();
+            connected = false;
             Console.WriteLine("Client Disconnected.");
             
+        }
+
+
+        private bool TryWrite(byte[] bytes, int offset, int count)
+        {
+            if (stream==null || !stream.CanWrite) return false;
+
+            try {
+                stream.Write(bytes, offset, count);
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+
+            return true;
         }
     }
 }

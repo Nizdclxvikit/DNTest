@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Drawing.Printing;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Text;
 
 namespace client;
@@ -13,11 +15,10 @@ public class ClientWindow : Form
     private TextBox ipText;
     private TextBox portText;
 
-    private bool connected = false;
+    private Client client;
 
-    public enum ResponderStatus {OK, ERR_INPUT_FORMAT, ERR_OTHER};
-    
-    private ColorGradient colorGradient;
+    double x=0, y=0, w=1.5, h=1.5;
+    private const double zoomFactor = 2.0;
 
     public ClientWindow()
     {
@@ -37,6 +38,7 @@ public class ClientWindow : Form
         renderArea.Location = new Point(0, 0);
         renderArea.Name = "RenderArea";
         renderArea.Size = new Size(600,600);
+        renderArea.MouseClick += new MouseEventHandler(RA_LeftClick);
 
         ipText = new TextBox();
         ipText.Name = "IPText";
@@ -70,42 +72,20 @@ public class ClientWindow : Form
         Controls.Add(portText);
         Controls.Add(connectButton);
 
+        
+        
 
-        colorGradient = new ColorGradient(
-            new double[]{0, 0.16, 0.33, 0.5, 0.66, 0.83, 1},
-            new Color[]{Color.Red, Color.Orange, Color.Yellow, Color.Green, Color.Blue, Color.Magenta, Color.Red}
-            );
+        client = new Client();
+        client.imageUpdated += new EventHandler(ImageUpdatedCB);
+        client.onConnect += new EventHandler(OnConnect);
+        client.onDisconnect += new EventHandler(OnDisconnect);
+        
     }
 
-    private void ConnectButtonPress(object sender, EventArgs e)
+    private void ConnectButtonPress(object? sender, EventArgs e)
     {
-        if (connected)
+        if (!client.isConnected)
         {
-
-        }
-        else
-        {
-            // string[] ipSplit = ipText.Text.Split('.');
-
-            // if (ipSplit.Length != 4)
-            // {
-            //     Console.WriteLine("Invalid IP format");
-            //     return;
-            // }
-
-            // byte[] ipAddr = new byte[4];
-            // bool success = true;
-            // for (int i=0; i<4; i++)
-            // {
-            //     success &= byte.TryParse(ipSplit[i], out ipAddr[i]);
-            // }
-
-            // if (!success)
-            // {
-            //     Console.WriteLine("Failed to parse IP");
-            //     return;
-            // }
-
             ushort port;
             if (!ushort.TryParse(portText.Text, out port))
             {
@@ -113,60 +93,81 @@ public class ClientWindow : Form
                 return;
             }
 
-            HandleConnection(ipText.Text, port);
+            client.Connect(ipText.Text, port);
+            client.MakeRequest(x, y, w, h); // Fractal Area
         }
-    }
-
-    private void HandleConnection(string host, ushort port)
-    {
-        // Connect
-        TcpClient client = new TcpClient(host, port);
-        NetworkStream stream = client.GetStream();
-
-        const string eol = "\r\n";
-
-        stream.Write(Encoding.UTF8.GetBytes("-1.4;0;0.1;0.1" + eol));
-        while (!stream.DataAvailable);
-
-        byte[] bytes = new byte[client.Available]; // Do we need to delete/deallocate this...?
-        stream.Read(bytes, 0, bytes.Length);
-
-        switch ((ResponderStatus)bytes[0])
+        else
         {
-            case ResponderStatus.OK:
-                ushort width, height;
-                width = (ushort)((bytes[1] << 8) | (bytes[2]));
-                height = (ushort)((bytes[3] << 8) | (bytes[4]));
+            client.Disconnect();
+        }
+    }
 
-                Bitmap recievedImage = new Bitmap(width,height);
-
-                for (int i=0; i< width; i++)
-                {
-                    for (int j=0; j<height; j++)
-                    {
-                        byte thisPixel = bytes[5+i+height*j];
-                        if (thisPixel == 0)
-                        {
-                            recievedImage.SetPixel(i, j, Color.Black);
-                        }
-                        else
-                        {
-                            recievedImage.SetPixel(i, j, colorGradient.SampleGradient(thisPixel / 16.0));
-                        }
-                        
-                    }
-                }
-
-                renderArea.Image = recievedImage;
-                renderArea.Refresh();
-                break;
-            default:
-                string message = Encoding.UTF8.GetString(bytes, 1, bytes.Length-1);
-                Console.WriteLine("Got Response: Server side error: " + message);
-                break;
+    private void ImageUpdatedCB(object? sender, EventArgs e)
+    {
+        if (InvokeRequired)
+        {
+            // If we are in the side thread, call this function from the main thread instead
+            Invoke(new Action<object, EventArgs>(ImageUpdatedCB), sender, e);
+            return;
         }
 
-        client.Close();
+        // In the main thread for sure
+        UpdateRenderArea(client.GetMyImage());
     }
+
+    private void OnConnect(object? sender, EventArgs e)
+    {
+        connectButton.Text = "Disconnect";
+        connectButton.Refresh();
+    }
+    private void OnDisconnect(object? sender, EventArgs e)
+    {
+        connectButton.Text = "Connect";
+        connectButton.Refresh();
+        UpdateRenderArea(new Bitmap("D:\\Github\\DNTest\\Client\\image.jpg"));
+    }
+
+    private void UpdateRenderArea(Image newImage)
+    {
+        renderArea.Image = newImage;
+        renderArea.Refresh();
+    }
+
+    private void RA_LeftClick(object? sender, MouseEventArgs e)
+    {
+        if (!client.isConnected) return;
+        x = RA_PointToX(e.Location);
+        y = RA_PointToY(e.Location);
+        switch (e.Button)
+        {
+            case MouseButtons.Left:
+                w /= zoomFactor;
+                h /= zoomFactor;
+                client.MakeRequest(x,y,w,h);
+                break;
+            case MouseButtons.Right:
+                w *= zoomFactor;
+                h *= zoomFactor;
+                client.MakeRequest(x,y,w,h);
+                break;
+        }
+        
+        
+    }
+    
+    private double RA_PointToX(Point point)
+    {
+        double newX = x - w/2;
+        newX += w * point.X/(double)renderArea.Width;
+        return newX;
+    }
+
+    private double RA_PointToY(Point point)
+    {
+        double newY = y + h/2;
+        newY -= h * point.Y/(double)renderArea.Height;
+        return newY;
+    }
+    
 
 }
