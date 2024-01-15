@@ -52,7 +52,7 @@ namespace Server
                     
                     if (n>=MAX_ITER) n = 0; // Didn't escape
 
-                    image[i + height*j] = n;
+                    image[i + width*j] = n;
                 }
             }
 

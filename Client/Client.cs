@@ -6,9 +6,6 @@ namespace client;
 
 public class Client
 {
-    // This will have to be in its own thread
-    // Ill create one client at the beginning and use connect and disconnect,
-    //  instead of creating and destroying client every time theres a new connection
 
     public enum ResponderStatus {OK, ERR_INPUT_FORMAT, ERR_OTHER};
     
@@ -50,19 +47,31 @@ public class Client
             if (stream.DataAvailable)
             {
                 // We got a response from the server
-                byte[] bytes = new byte[client.Available];
-                stream.Read(bytes, 0, bytes.Length);
+                
+                //Read 1 byte (status)
+                ResponderStatus status = (ResponderStatus)stream.ReadByte();
+                
 
-                switch ((ResponderStatus)bytes[0])
+                switch (status)
                 {
                     case ResponderStatus.OK:
-                        if (bytes.Length <= 5) break; // Keepalive, probably
+                        if (client.Available <= 8) break; // Keepalive, probably
+
+                        // Read 8 bytes (chunk dims)
+                        byte[] bytes = new byte[8];
+                        stream.ReadExactly(bytes, 0, 8);
 
                         ushort width, height, leftc, topc;
-                        width = (ushort)((bytes[1] << 8) | (bytes[2]));
-                        height = (ushort)((bytes[3] << 8) | (bytes[4]));
-                        leftc = (ushort)((bytes[5] << 8) | (bytes[6]));
-                        topc = (ushort)((bytes[7] << 8) | (bytes[8]));
+                        width = (ushort)((bytes[0] << 8) | (bytes[1]));
+                        height = (ushort)((bytes[2] << 8) | (bytes[3]));
+                        leftc = (ushort)((bytes[4] << 8) | (bytes[5]));
+                        topc = (ushort)((bytes[6] << 8) | (bytes[7]));
+
+                        if (client.Available < width*height) throw new Exception("Not enough data in the stream for the specified chunk dimensions");
+                        
+                        // Read the rest of the data (a new packet should begin right after this)
+                        bytes = new byte[(int)width*height];
+                        stream.ReadExactly(bytes, 0, width*height);
 
                         Bitmap recievedImage = new Bitmap(width,height);
 
@@ -70,7 +79,7 @@ public class Client
                         {
                             for (int j=0; j<height; j++)
                             {
-                                byte thisPixel = bytes[9 + i+height*j];
+                                byte thisPixel = bytes[i+width*j];
                                 if (thisPixel == 0)
                                 {
                                     recievedImage.SetPixel(i, j, Color.Black);
@@ -88,7 +97,15 @@ public class Client
                         imageUpdated?.Invoke(this, EventArgs.Empty);
                         break;
                     default:
-                        string message = Encoding.UTF8.GetString(bytes, 1, bytes.Length-1);
+                        byte[] msgbytes = new byte[256]; // some maximum message length
+                        int k = 0; int c;
+                        do { // Read bytes until 0 (end of string)
+                            c = stream.ReadByte();
+                            if (c==-1) throw new Exception("End of stream, mid-message");
+                            msgbytes[k++] = (byte) c;
+                        } while(c != 0);
+
+                        string message = Encoding.UTF8.GetString(msgbytes, 0, k);
                         Console.WriteLine("Got Response: Server side error: " + message);
                         break;
                 }
