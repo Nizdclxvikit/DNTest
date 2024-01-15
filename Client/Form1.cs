@@ -26,7 +26,7 @@ public class ClientWindow : Form
         this.Text = "Client Window";
         this.Size = new Size(800, 600);
 
-        
+
         /*myConsole = new RichTextBox();
         myConsole.Location = new Point(600, 0);
         myConsole.Name = "Console";
@@ -34,36 +34,44 @@ public class ClientWindow : Form
         myConsole.Text = "Text and stuff...";
         myConsole.ReadOnly = true;*/
 
-        renderArea = new PictureBox();
-        renderArea.Location = new Point(0, 0);
-        renderArea.Name = "RenderArea";
-        renderArea.Size = new Size(600,600);
+        Bitmap MyImage = new Bitmap("D:\\Github\\DNTest\\Client\\image.jpg");
+        renderArea = new PictureBox
+        {
+            Location = new Point(0, 0),
+            Name = "RenderArea",
+            Size = new Size(600, 600),
+            SizeMode = PictureBoxSizeMode.StretchImage,
+            ClientSize = new Size(600, 600),
+            Image = (Image) MyImage
+        };
         renderArea.MouseClick += new MouseEventHandler(RA_LeftClick);
 
-        ipText = new TextBox();
-        ipText.Name = "IPText";
-        ipText.Text = "127.0.0.1";
-        ipText.Location = new Point(610, 10);
-        ipText.Size = new Size(80, 24);
+        
+        ipText = new TextBox
+        {
+            Name = "IPText",
+            Text = "127.0.0.1",
+            Location = new Point(610, 10),
+            Size = new Size(80, 24)
+        };
 
-        portText = new TextBox();
-        portText.Name = "IPText";
-        portText.Text = "80";
-        portText.Location = new Point(610, 50);
-        portText.Size = new Size(80, 24);
+        portText = new TextBox
+        {
+            Name = "IPText",
+            Text = "80",
+            Location = new Point(610, 50),
+            Size = new Size(80, 24)
+        };
 
-        connectButton = new Button();
-        connectButton.Location = new Point(610, 90);
-        connectButton.Size = new Size(80, 24);
-        connectButton.Name = "ConnectButton";
-        connectButton.Text = "Connect";
+        connectButton = new Button
+        {
+            Name = "ConnectButton",
+            Text = "Connect",
+            Location = new Point(610, 90),
+            Size = new Size(80, 24)
+        };
         connectButton.Click += new System.EventHandler(ConnectButtonPress);
 
-        // Stretches the image to fit the pictureBox.
-        renderArea.SizeMode = PictureBoxSizeMode.StretchImage ;
-        Bitmap MyImage = new Bitmap("D:\\Github\\DNTest\\Client\\image.jpg");
-        renderArea.ClientSize = new Size(600, 600);
-        renderArea.Image = (Image) MyImage ;
 
         // Add to the form's control collection,
         // so that it will appear on the form.
@@ -72,14 +80,14 @@ public class ClientWindow : Form
         Controls.Add(portText);
         Controls.Add(connectButton);
 
-        
-        
 
         client = new Client();
         client.imageUpdated += new EventHandler(ImageUpdatedCB);
         client.onConnect += new EventHandler(OnConnect);
         client.onDisconnect += new EventHandler(OnDisconnect);
         
+
+        this.FormClosed += new FormClosedEventHandler(OnFormClosed);
     }
 
     private void ConnectButtonPress(object? sender, EventArgs e)
@@ -167,6 +175,11 @@ public class ClientWindow : Form
         double newY = y + h/2;
         newY -= h * point.Y/(double)renderArea.Height;
         return newY;
+    }
+
+    private void OnFormClosed(object? sender, FormClosedEventArgs e)
+    {
+        client?.Disconnect();
     }
     
 

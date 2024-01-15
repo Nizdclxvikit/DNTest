@@ -8,16 +8,84 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Server
 {
+    public enum ImageResponseStatus {OK, ERR_INPUT_FORMAT, ERR_OTHER};
+    public class ImageResponse
+    {
+        
+        public ImageResponseStatus status; 
+        public ushort width;
+        public ushort height;
+
+        public byte[] data;
+        private ushort leftc = 0, topc = 0;
+        public string? message;
+        private const string eol = "\r\n";
+
+        public ImageResponse(ImageResponseStatus newStatus, string? dMessage = null)
+        {
+            status = newStatus;
+            data = Array.Empty<byte>();
+            width = 0;
+            height = 0;
+            if (dMessage != null) message = dMessage;
+        }
+
+        public ImageResponse(ushort dWidth, ushort dHeight)
+        {
+            status = ImageResponseStatus.OK;
+            width = dWidth;
+            height = dHeight;
+            data = new byte[width*height];
+        }
+
+        public byte[] FormulatePacket()
+        {
+            byte[] packet = {};
+            // What comes after depends on status
+            switch (status)
+            {
+                case ImageResponseStatus.OK:
+                    packet = new byte[9 + width * height];
+                    // Header
+                    packet[0] = (byte)status;
+                    packet[1] = (byte)(width >> 8);
+                    packet[2] = (byte)width;
+                    packet[3] = (byte)(height >> 8);
+                    packet[4] = (byte)height;
+                    packet[5] = (byte)(leftc >> 8);
+                    packet[6] = (byte)leftc;
+                    packet[7] = (byte)(topc >> 8);
+                    packet[8] = (byte)topc;
+                    // Data
+                    Buffer.BlockCopy(data, 0, packet, 9, width*height);
+                    break;
+                default:
+                    
+                    packet = new byte[1 + (message==null ? 0 : message.Length)];
+                    packet[0] = (byte) status;
+                    if (message != null)
+                    {
+                        byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+                        Buffer.BlockCopy(messageBytes, 0, packet, 1, messageBytes.Length);
+                    }
+                    break;
+
+            }
+            return packet;
+        }
+    }
+
     class Server
     {
 
         private TcpListener TL;
-        private Responder responder;
+    
         private NetworkStream stream;
         private bool connected = false;
 
         private static readonly byte[] keepAlive = {0};
-        private const string eol = "\r\n";
+
+        private ImageRenderer renderer;
 
         public Server() // This will never exit
         {
@@ -25,7 +93,7 @@ namespace Server
             IPAddress localaddr = IPAddress.Parse("127.0.0.1");
             int port = 80;
             TL = new TcpListener(localaddr, port);
-            responder = new ResponderFractal();
+            renderer = new MandelRenderer();
 
             TL.Start();
             Console.WriteLine("Listener started");
@@ -63,36 +131,16 @@ namespace Server
                 if (!connected) break;
                 
                 // Read input data
-                byte[] bytes = new byte[client.Available]; // Do we need to delete/deallocate this...?
+                byte[] bytes = new byte[client.Available];
                 stream.Read(bytes, 0, bytes.Length);
 
                 if (Encoding.UTF8.GetString(bytes) == "EXIT") break; //Disconnect
 
-                // Let the responder do the calculations
-                Response response = responder.GetResponse(bytes);
+                // do the calculations
+                ImageResponse response = GetResponse(bytes);
 
                 // Formulate our response (a tcp packet, max 65535 bytes)
-                byte[] responseBytes = {};
-
-                // What comes after depends on status
-                switch (response.status)
-                {
-                    case ResponderStatus.OK:
-                        responseBytes = response.data;
-                        break;
-                    case ResponderStatus.ERR_INPUT_FORMAT:
-                        responseBytes = Encoding.UTF8.GetBytes("Error with input format" + eol);
-                        break;
-                    case ResponderStatus.ERR_OTHER:
-                        responseBytes = Encoding.UTF8.GetBytes("Error with something" + eol);
-                        break;
-
-                }
-
-                // Concat the status to the beginning
-                byte[] fullResponse = new byte[1 + responseBytes.Length];
-                fullResponse[0] = (byte)response.status;
-                Buffer.BlockCopy(responseBytes, 0, fullResponse, 1, responseBytes.Length);
+                byte[] fullResponse = response.FormulatePacket();
 
                 // Send it, if it fails just bail
                 if (!TryWrite(fullResponse, 0, fullResponse.Length)) break;
@@ -108,6 +156,44 @@ namespace Server
             
         }
 
+        public ImageResponse GetResponse(byte[] input)
+        {
+
+            string str = Encoding.UTF8.GetString(input);
+            
+            string[] args = str.Split(";");
+
+            if (args.Length == 4)
+            {
+                double x, y, w, h;
+                bool success = true;
+
+                success &= double.TryParse(args[0], out x);
+                success &= double.TryParse(args[1], out y);
+                success &= double.TryParse(args[2], out w);
+                success &= double.TryParse(args[3], out h);
+                
+                if (success) 
+                {
+                    
+
+                    int width = 200, height = 200;
+                    byte[] imageData = renderer.RenderArea(x, y, w, h, width, height);
+                    
+                    ImageResponse response = new ImageResponse((ushort)width, (ushort)height);
+                    response.data = imageData;
+                    
+
+                    return response;
+                }
+                else return new ImageResponse(ImageResponseStatus.ERR_INPUT_FORMAT);
+            }
+            else
+            {
+                return new ImageResponse(ImageResponseStatus.ERR_INPUT_FORMAT);
+            }
+
+        }
 
         private bool TryWrite(byte[] bytes, int offset, int count)
         {

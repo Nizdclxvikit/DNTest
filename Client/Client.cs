@@ -32,12 +32,11 @@ public class Client
     public Client()
     {
         mainLoopThread = new Thread(new ThreadStart(MainLoop));
-        myImage = new ChunkedBitmap(new Bitmap("D:\\Github\\DNTest\\Client\\image.jpg"));
-        
+        myImage = new ChunkedBitmap(200, 200);
+
         colorGradient = new ColorGradient(
-            new double[]{0, 0.16, 0.33, 0.5, 0.66, 0.83, 1},
-            new Color[]{Color.Red, Color.Orange, Color.Yellow, Color.Green, Color.Blue, Color.Magenta, Color.Red}
-            );
+            [0, 0.16, 0.33, 0.5, 0.66, 0.83, 1],
+            [Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red]);
     }
 
     private void MainLoop()
@@ -59,9 +58,11 @@ public class Client
                     case ResponderStatus.OK:
                         if (bytes.Length <= 5) break; // Keepalive, probably
 
-                        ushort width, height;
+                        ushort width, height, leftc, topc;
                         width = (ushort)((bytes[1] << 8) | (bytes[2]));
                         height = (ushort)((bytes[3] << 8) | (bytes[4]));
+                        leftc = (ushort)((bytes[5] << 8) | (bytes[6]));
+                        topc = (ushort)((bytes[7] << 8) | (bytes[8]));
 
                         Bitmap recievedImage = new Bitmap(width,height);
 
@@ -69,7 +70,7 @@ public class Client
                         {
                             for (int j=0; j<height; j++)
                             {
-                                byte thisPixel = bytes[5+i+height*j];
+                                byte thisPixel = bytes[9 + i+height*j];
                                 if (thisPixel == 0)
                                 {
                                     recievedImage.SetPixel(i, j, Color.Black);
@@ -78,12 +79,11 @@ public class Client
                                 {
                                     recievedImage.SetPixel(i, j, colorGradient.SampleGradient(thisPixel / 16.0));
                                 }
-                                
                             }
                         }
 
-                        myImage = new ChunkedBitmap(recievedImage.Width, recievedImage.Height);
-                        myImage.PutChunk(0, 0, recievedImage);
+                        
+                        myImage.PutChunk(leftc, topc, recievedImage);
                         
                         imageUpdated?.Invoke(this, EventArgs.Empty);
                         break;
