@@ -18,6 +18,7 @@ public class ClientWindow : Form
     private Client client;
 
     double x=0, y=0, w=1.5, h=1.5;
+    
     private const double zoomFactor = 2.0;
 
     public ClientWindow()
@@ -25,7 +26,6 @@ public class ClientWindow : Form
         // Set the form's caption, which will appear in the title bar.
         this.Text = "Client Window";
         this.Size = new Size(800, 600);
-
 
         /*myConsole = new RichTextBox();
         myConsole.Location = new Point(600, 0);
@@ -81,7 +81,7 @@ public class ClientWindow : Form
         Controls.Add(connectButton);
 
 
-        client = new Client();
+        client = new Client(600, 600);
         client.imageUpdated += new EventHandler(ImageUpdatedCB);
         client.onConnect += new EventHandler(OnConnect);
         client.onDisconnect += new EventHandler(OnDisconnect);
@@ -102,7 +102,7 @@ public class ClientWindow : Form
             }
 
             client.Connect(ipText.Text, port);
-            client.MakeRequest(x, y, w, h); // Fractal Area
+            client.MakeRequest(x, y, w, h, 600, 600); // Fractal Area
         }
         else
         {
@@ -151,12 +151,12 @@ public class ClientWindow : Form
             case MouseButtons.Left:
                 w /= zoomFactor;
                 h /= zoomFactor;
-                client.MakeRequest(x,y,w,h);
+                client.MakeRequest(x,y,w,h, 600,600);
                 break;
             case MouseButtons.Right:
                 w *= zoomFactor;
                 h *= zoomFactor;
-                client.MakeRequest(x,y,w,h);
+                client.MakeRequest(x,y,w,h, 600,600);
                 break;
         }
         
@@ -179,7 +179,8 @@ public class ClientWindow : Form
 
     private void OnFormClosed(object? sender, FormClosedEventArgs e)
     {
-        client?.Disconnect();
+        if (client.isConnected)
+            client?.Disconnect();
     }
     
 

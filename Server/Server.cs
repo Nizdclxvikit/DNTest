@@ -258,21 +258,21 @@ namespace Server
             
             string[] args = str.Split(";");
 
-            if (args.Length == 4)
+            if (args.Length == 6)
             {
                 double x, y, w, h;
+                int width, height;
                 bool success = true;
 
                 success &= double.TryParse(args[0], out x);
                 success &= double.TryParse(args[1], out y);
                 success &= double.TryParse(args[2], out w);
                 success &= double.TryParse(args[3], out h);
+                success &= int.TryParse(args[4], out width);
+                success &= int.TryParse(args[5], out height);
                 
                 if (success) 
                 {
-                    
-
-                    int width = 200, height = 200;
                     byte[] imageData = renderer.RenderArea(x, y, w, h, width, height);
                     
                     ImageResponse response = new ImageResponse((ushort)width, (ushort)height);

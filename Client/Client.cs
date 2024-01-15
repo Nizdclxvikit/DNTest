@@ -26,10 +26,10 @@ public class Client
 
     private ChunkedBitmap myImage;
     public Image GetMyImage()  {return myImage.GetBitmap();}
-    public Client()
+    public Client(int width, int height)
     {
         mainLoopThread = new Thread(new ThreadStart(MainLoop));
-        myImage = new ChunkedBitmap(200, 200);
+        myImage = new ChunkedBitmap(width, height);
 
         colorGradient = new ColorGradient(
             [0, 0.16, 0.33, 0.5, 0.66, 0.83, 1],
@@ -143,9 +143,9 @@ public class Client
         onDisconnect?.Invoke(this, EventArgs.Empty);
     }
 
-    public void MakeRequest(double x, double y, double w, double h)
+    public void MakeRequest(double x, double y, double w, double h, int width, int height)
     {
-        string command = x.ToString() + ";" + y.ToString() + ";" + w.ToString() + ";" + h.ToString() + eol;
+        string command = x.ToString() + ";" + y.ToString() + ";" + w.ToString() + ";" + h.ToString() + ";" + width.ToString() + ";" + height.ToString() + eol;
         
         // This might fail if the server dies
         if (stream == null) throw new Exception("Stream is null");
